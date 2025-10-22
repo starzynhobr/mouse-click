@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python gui.py:*)",
+      "Bash(pip install:*)",
+      "Bash(timeout:*)",
+      "Bash(python test_startup.py:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
