@@ -2,3 +2,4 @@ pynput==1.7.6
 customtkinter==5.2.1
 pillow==10.1.0
 pystray==0.19.5
+pyautogui==0.9.54

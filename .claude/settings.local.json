@@ -4,7 +4,9 @@
       "Bash(python gui.py:*)",
       "Bash(pip install:*)",
       "Bash(timeout:*)",
-      "Bash(python test_startup.py:*)"
+      "Bash(python test_startup.py:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

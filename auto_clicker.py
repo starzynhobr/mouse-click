@@ -1,91 +1,104 @@
 """
-Script de Auto-Clicker Customizado
-- Core do auto-clicker com suporte para interface gráfica
+Auto-Clicker usando Windows Low-Level Mouse Hook (WH_MOUSE_LL)
+Solução que distingue cliques físicos de cliques programáticos usando LLMHF_INJECTED
 """
 
+import ctypes
+import ctypes.wintypes as wintypes
 import threading
 import time
-import ctypes
-from pynput import mouse, keyboard
-from pynput.mouse import Button, Controller
-from pynput.keyboard import Key, KeyCode
+import sys
 
-try:
-    import pyautogui
-    PYAUTOGUI_AVAILABLE = True
-except ImportError:
-    PYAUTOGUI_AVAILABLE = False
+# Windows API
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+
+# Mensagens do mouse (Low-level)
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP   = 0x0202
+WM_RBUTTONDOWN = 0x0204
+WM_RBUTTONUP   = 0x0205
+WM_MBUTTONDOWN = 0x0207
+WM_MBUTTONUP   = 0x0208
+
+# Flag para detectar evento injetado
+LLMHF_INJECTED = 0x00000001
+
+# Estrutura MSLLHOOKSTRUCT
+class MSLLHOOKSTRUCT(ctypes.Structure):
+    _fields_ = [
+        ("pt_x", wintypes.LONG),
+        ("pt_y", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("flags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.c_void_p),
+    ]
+
+# Tipo para HookProc (LRESULT é LONG_PTR)
+LRESULT = ctypes.c_long
+LowLevelMouseProc = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+
+# INPUT structures para SendInput
+PUL = ctypes.POINTER(wintypes.ULONG)
+
+class MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", PUL)
+    ]
+
+class INPUT(ctypes.Structure):
+    class _I(ctypes.Union):
+        _fields_ = [("mi", MOUSEINPUT)]
+    _anonymous_ = ("i",)
+    _fields_ = [("type", wintypes.DWORD), ("i", _I)]
+
+INPUT_MOUSE = 0
+MOUSEEVENTF_LEFTDOWN = 0x0002
+MOUSEEVENTF_LEFTUP   = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP   = 0x0010
+
+SendInput = user32.SendInput
+SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
+SendInput.restype  = wintypes.UINT
 
 class AutoClicker:
-    # Códigos de tecla virtual do Windows para GetAsyncKeyState
-    VK_LBUTTON = 0x01  # Botão esquerdo do mouse
-    VK_RBUTTON = 0x02  # Botão direito do mouse
-
-    # Constantes para mouse_event
-    MOUSEEVENTF_LEFTDOWN = 0x0002
-    MOUSEEVENTF_LEFTUP = 0x0004
-    MOUSEEVENTF_RIGHTDOWN = 0x0008
-    MOUSEEVENTF_RIGHTUP = 0x0010
-
-    @staticmethod
-    def is_button_pressed(button):
-        """Verifica se um botão do mouse está pressionado usando Windows API"""
-        if button == Button.left:
-            vk_code = AutoClicker.VK_LBUTTON
-        elif button == Button.right:
-            vk_code = AutoClicker.VK_RBUTTON
-        else:
-            return False
-
-        # GetAsyncKeyState retorna um short
-        # Bit mais significativo (0x8000) indica se a tecla está pressionada
-        state = ctypes.windll.user32.GetAsyncKeyState(vk_code)
-        return (state & 0x8000) != 0
-
-    @staticmethod
-    def click_windows_api(button):
-        """Faz um clique usando Windows API diretamente"""
-        if button == Button.left:
-            # Clique esquerdo: down + up
-            ctypes.windll.user32.mouse_event(AutoClicker.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-            ctypes.windll.user32.mouse_event(AutoClicker.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-        elif button == Button.right:
-            # Clique direito: down + up
-            ctypes.windll.user32.mouse_event(AutoClicker.MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-            ctypes.windll.user32.mouse_event(AutoClicker.MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
-
     def __init__(self, cps=20, enable_right_click=False, hotkey='<ctrl>+<shift>+a', status_callback=None):
         """
-        Inicializa o auto-clicker
+        Inicializa o auto-clicker com hook de baixo nível
 
         Args:
-            cps: Clicks por segundo (padrão: 20)
-            enable_right_click: Habilita auto-click no botão direito também
-            hotkey: Tecla de atalho para ativar/desativar
+            cps: Clicks por segundo
+            enable_right_click: Habilita auto-click no botão direito
+            hotkey: Tecla de atalho (não implementado nesta versão)
             status_callback: Função callback para notificar mudanças de estado
         """
-        self.mouse_controller = Controller()
         self.cps = cps
         self.click_interval = 1.0 / cps
         self.enable_right_click = enable_right_click
-        self.hotkey = hotkey
         self.status_callback = status_callback
 
-        # Estado do auto-clicker
+        # Estado
         self.auto_click_enabled = False
-        self.clicking = False
+        self.left_holding = False
+        self.right_holding = False
         self.running = True
 
-        # Controle de qual botão está sendo auto-clicado
-        self.current_auto_button = None
+        # Hook
+        self.hook_id = None
+        self.hook_proc = None
 
-        # Thread para os cliques
-        self.click_thread = None
+        # Thread do clicker
+        self.clicker_thread = None
 
-        # Listeners
-        self.mouse_listener = None
-        self.keyboard_listener = None
-        self.hotkey_listener = None
+        # Thread para message loop do hook
+        self.hook_thread = None
 
     def set_cps(self, cps):
         """Atualiza os cliques por segundo"""
@@ -97,161 +110,176 @@ class AutoClicker:
         self.enable_right_click = enabled
 
     def set_hotkey(self, hotkey):
-        """Define nova tecla de atalho"""
-        self.hotkey = hotkey
-        # Reinicia o listener de hotkey
-        if self.hotkey_listener:
-            self.hotkey_listener.stop()
-            self.start_hotkey_listener()
+        """Define nova tecla de atalho (não implementado)"""
+        pass
 
     def toggle_auto_click(self):
         """Alterna entre ativar/desativar o modo auto-click"""
         self.auto_click_enabled = not self.auto_click_enabled
-        status = "ATIVADO" if self.auto_click_enabled else "DESATIVADO"
-        print(f"[DEBUG] Auto-click {status}")
+        print(f"[DEBUG] Auto-click {'ATIVADO' if self.auto_click_enabled else 'DESATIVADO'}")
 
-        # Notifica callback
         if self.status_callback:
             self.status_callback(self.auto_click_enabled)
 
-        # Se desativar enquanto está clicando, para os cliques
-        if not self.auto_click_enabled:
-            self.clicking = False
+    def click_left(self):
+        """Gera um clique esquerdo via SendInput"""
+        down = INPUT(type=INPUT_MOUSE, mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTDOWN, 0, None))
+        up = INPUT(type=INPUT_MOUSE, mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_LEFTUP, 0, None))
+        arr = (INPUT * 2)(down, up)
+        SendInput(2, arr, ctypes.sizeof(INPUT))
 
-    def perform_clicks(self, button):
-        """Executa cliques contínuos enquanto o botão estiver pressionado"""
+    def click_right(self):
+        """Gera um clique direito via SendInput"""
+        down = INPUT(type=INPUT_MOUSE, mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_RIGHTDOWN, 0, None))
+        up = INPUT(type=INPUT_MOUSE, mi=MOUSEINPUT(0, 0, 0, MOUSEEVENTF_RIGHTUP, 0, None))
+        arr = (INPUT * 2)(down, up)
+        SendInput(2, arr, ctypes.sizeof(INPUT))
+
+    def clicker_loop(self):
+        """Thread que dispara os cliques enquanto o botão está sendo segurado"""
         click_count = 0
-        print(f"[DEBUG] Iniciando cliques automáticos...")
 
-        # Loop de cliques com verificação integrada
-        while self.clicking and self.auto_click_enabled:
-            # Faz o clique usando Windows API diretamente
-            self.click_windows_api(button)
-            click_count += 1
+        while self.running:
+            # Botão esquerdo
+            if self.auto_click_enabled and self.left_holding:
+                self.click_left()
+                click_count += 1
 
-            if click_count % 10 == 0:
-                print(f"[DEBUG] Cliques realizados: {click_count}")
+                if click_count % 10 == 0:
+                    print(f"[DEBUG] Cliques esquerdos: {click_count}")
 
-            # Aguarda metade do intervalo
-            time.sleep(self.click_interval / 2)
+                time.sleep(self.click_interval)
 
-            # AGORA verifica o estado (sistema está estável entre cliques)
-            is_pressed = self.is_button_pressed(button)
+            # Botão direito (se habilitado)
+            elif self.enable_right_click and self.auto_click_enabled and self.right_holding:
+                self.click_right()
+                click_count += 1
 
-            if not is_pressed:
-                print(f"[DEBUG] Botão SOLTO detectado - parando (após {click_count} cliques)")
+                if click_count % 10 == 0:
+                    print(f"[DEBUG] Cliques direitos: {click_count}")
+
+                time.sleep(self.click_interval)
+            else:
+                time.sleep(0.01)
+
+    @LowLevelMouseProc
+    def low_level_mouse_proc(self, nCode, wParam, lParam):
+        """Hook callback - processa apenas eventos físicos"""
+        if nCode == 0:
+            ms = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
+            injected = bool(ms.flags & LLMHF_INJECTED)
+
+            # Ignora eventos injetados (nossos cliques programáticos)
+            if not injected:
+                # Botão do meio (scroll) - toggle auto-click
+                if wParam == WM_MBUTTONDOWN:
+                    self.toggle_auto_click()
+
+                # Botão esquerdo
+                elif wParam == WM_LBUTTONDOWN:
+                    print(f"[DEBUG] Botão esquerdo físico PRESSIONADO")
+                    self.left_holding = True
+                elif wParam == WM_LBUTTONUP:
+                    print(f"[DEBUG] Botão esquerdo físico SOLTO")
+                    self.left_holding = False
+
+                # Botão direito
+                elif wParam == WM_RBUTTONDOWN:
+                    print(f"[DEBUG] Botão direito físico PRESSIONADO")
+                    self.right_holding = True
+                elif wParam == WM_RBUTTONUP:
+                    print(f"[DEBUG] Botão direito físico SOLTO")
+                    self.right_holding = False
+
+        # Chama próximo hook
+        return user32.CallNextHookEx(None, nCode, wParam, lParam)
+
+    def install_hook(self):
+        """Instala o hook e roda o message loop"""
+        WH_MOUSE_LL = 14
+
+        # Mantém referência para o callback (evita garbage collection)
+        self.hook_proc = LowLevelMouseProc(self.low_level_mouse_proc)
+
+        self.hook_id = user32.SetWindowsHookExW(
+            WH_MOUSE_LL,
+            self.hook_proc,
+            kernel32.GetModuleHandleW(None),
+            0
+        )
+
+        if not self.hook_id:
+            print("[ERRO] Falha ao instalar hook. Execute como administrador.")
+            return
+
+        print("[INFO] Hook instalado com sucesso")
+
+        # Message loop necessário para manter o hook vivo
+        msg = wintypes.MSG()
+        while self.running:
+            ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+            if ret == 0:  # WM_QUIT
                 break
+            if ret == -1:
+                print("[ERRO] Erro no GetMessage")
+                break
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
 
-            # Aguarda a outra metade do intervalo antes do próximo clique
-            time.sleep(self.click_interval / 2)
-
-        print(f"[DEBUG] Total de cliques: {click_count}")
-
-    def start_clicking(self, button):
-        """Inicia a thread de cliques automáticos"""
-        # Para qualquer clique anterior antes de iniciar novo
-        self.stop_clicking()
-
-        self.clicking = True
-
-        # Inicia a thread de cliques (que agora também monitora o estado)
-        self.click_thread = threading.Thread(target=self.perform_clicks, args=(button,), daemon=True)
-        self.click_thread.start()
-
-    def stop_clicking(self):
-        """Para os cliques automáticos"""
-        self.clicking = False
-
-        if self.click_thread and self.click_thread.is_alive():
-            self.click_thread.join(timeout=0.3)
-
-    def on_click(self, x, y, button, pressed):
-        """Callback para eventos de clique do mouse"""
-        # Botão do meio (scroll) - toggle auto-click (sempre processa)
-        if button == Button.middle and pressed:
-            self.toggle_auto_click()
-            return
-
-        # Durante auto-click, IGNORA TODOS os eventos (a thread de cliques cuida de tudo)
-        if self.clicking:
-            print(f"[DEBUG] Evento ignorado - auto-click ativo")
-            return
-
-        # Botão esquerdo - iniciar cliques automáticos (se modo ativado)
-        if button == Button.left and self.auto_click_enabled and pressed:
-            print(f"[DEBUG] Botão esquerdo PRESSIONADO (usuário)")
-            self.current_auto_button = Button.left
-            self.start_clicking(Button.left)
-            return
-
-        # Botão direito - iniciar cliques automáticos (se habilitado e modo ativado)
-        if button == Button.right and self.enable_right_click and self.auto_click_enabled and pressed:
-            print(f"[DEBUG] Botão direito PRESSIONADO (usuário)")
-            self.current_auto_button = Button.right
-            self.start_clicking(Button.right)
-            return
-
-    def on_hotkey_press(self):
-        """Callback para o atalho de teclado"""
-        self.toggle_auto_click()
-
-    def start_hotkey_listener(self):
-        """Inicia o listener de hotkey"""
-        try:
-            from pynput.keyboard import GlobalHotKeys
-
-            hotkeys = {
-                self.hotkey: self.on_hotkey_press
-            }
-
-            self.hotkey_listener = GlobalHotKeys(hotkeys)
-            self.hotkey_listener.start()
-        except Exception as e:
-            print(f"Erro ao iniciar hotkey listener: {e}")
+        # Cleanup
+        if self.hook_id:
+            user32.UnhookWindowsHookEx(self.hook_id)
+            print("[INFO] Hook removido")
 
     def start(self):
         """Inicia o auto-clicker"""
-        # Inicia os listeners
-        self.mouse_listener = mouse.Listener(on_click=self.on_click)
-        self.mouse_listener.start()
+        # Inicia thread do clicker
+        self.clicker_thread = threading.Thread(target=self.clicker_loop, daemon=True)
+        self.clicker_thread.start()
 
-        # Inicia o listener de hotkey
-        self.start_hotkey_listener()
+        # Inicia hook em thread separada
+        self.hook_thread = threading.Thread(target=self.install_hook, daemon=False)
+        self.hook_thread.start()
 
     def stop(self):
         """Para o auto-clicker"""
         self.running = False
-        self.stop_clicking()
 
-        if self.mouse_listener:
-            self.mouse_listener.stop()
-        if self.keyboard_listener:
-            self.keyboard_listener.stop()
-        if self.hotkey_listener:
-            self.hotkey_listener.stop()
+        # Envia WM_QUIT para sair do message loop
+        if self.hook_thread and self.hook_thread.is_alive():
+            user32.PostThreadMessageW(
+                kernel32.GetCurrentThreadId(),
+                0x0012,  # WM_QUIT
+                0,
+                0
+            )
+            self.hook_thread.join(timeout=1.0)
 
 if __name__ == "__main__":
-    # Modo console (sem UI)
+    if sys.platform != "win32":
+        print("Este script é compatível apenas com Windows.")
+        sys.exit(1)
+
     def status_changed(enabled):
-        status = "ATIVADO" if enabled else "DESATIVADO"
-        print(f"Auto-click {status}")
+        print(f"[CALLBACK] Status mudou: {'ATIVADO' if enabled else 'DESATIVADO'}")
 
-    print("=" * 50)
-    print("Auto-Clicker (Modo Console)")
-    print("=" * 50)
-    print("Clique no BOTÃO DO SCROLL para ativar/desativar")
-    print("Ctrl+Shift+A também ativa/desativa")
-    print("Ctrl+C para sair")
-    print("=" * 50)
+    print("=" * 60)
+    print("Auto-Clicker Pro - Versão com Hook de Baixo Nível")
+    print("=" * 60)
+    print("Instruções:")
+    print("1. Clique no BOTÃO DO SCROLL (middle button) para ATIVAR/DESATIVAR")
+    print("2. Quando ativado, SEGURE o botão esquerdo para auto-click")
+    print("3. SOLTE o botão para parar")
+    print("4. Ctrl+C para sair")
+    print("=" * 60)
 
-    clicker = AutoClicker(cps=20, enable_right_click=False, status_callback=status_changed)
+    clicker = AutoClicker(cps=20, status_callback=status_changed)
     clicker.start()
 
     try:
-        while clicker.running:
-            time.sleep(0.1)
+        # Mantém programa rodando
+        while True:
+            time.sleep(1)
     except KeyboardInterrupt:
-        print("\nEncerrando...")
-    finally:
+        print("\n[INFO] Encerrando...")
         clicker.stop()
-        print("Programa encerrado.")
