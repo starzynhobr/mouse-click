@@ -26,10 +26,31 @@ pip install -r requirements.txt
 
 ### Interface Gráfica (Recomendado)
 
-Execute a interface gráfica:
+⚠️ **IMPORTANTE**: O programa precisa de privilégios de administrador para instalar o hook de mouse de baixo nível.
+
+**Opção 1 - Executar como Admin (Windows):**
+```bash
+# PowerShell
+Start-Process python -ArgumentList "gui.py" -Verb RunAs
+
+# Ou use o script Python:
+python run_as_admin.py
+
+# Ou clique duplo em:
+run_admin.bat
+```
+
+**Opção 2 - VSCode como Admin:**
+1. Feche o VSCode
+2. Clique com botão direito no ícone do VSCode
+3. Selecione "Executar como administrador"
+4. No terminal: `python gui.py`
+
+**Opção 3 - Terminal Elevado:**
 ```bash
 python gui.py
 ```
+(Execute em um terminal aberto como administrador)
 
 ### Modo Console
 

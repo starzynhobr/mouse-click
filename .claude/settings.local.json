@@ -7,7 +7,8 @@
       "Bash(python test_startup.py:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []
