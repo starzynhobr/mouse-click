@@ -127,7 +127,12 @@ class AutoClicker:
     def toggle_auto_click(self):
         """Alterna entre ativar/desativar o modo auto-click"""
         self.auto_click_enabled = not self.auto_click_enabled
-        print(f"[DEBUG] Auto-click {'ATIVADO' if self.auto_click_enabled else 'DESATIVADO'}")
+        status = 'ATIVADO' if self.auto_click_enabled else 'DESATIVADO'
+        print(f"")
+        print(f"{'='*60}")
+        print(f"[TOGGLE] Auto-click {status}")
+        print(f"{'='*60}")
+        print(f"")
 
         if self.status_callback:
             self.status_callback(self.auto_click_enabled)
@@ -179,10 +184,24 @@ class AutoClicker:
             ms = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
             injected = bool(ms.flags & LLMHF_INJECTED)
 
+            # Debug: Log de TODOS os eventos não-injetados
+            if not injected:
+                event_names = {
+                    WM_LBUTTONDOWN: "LEFT_DOWN",
+                    WM_LBUTTONUP: "LEFT_UP",
+                    WM_RBUTTONDOWN: "RIGHT_DOWN",
+                    WM_RBUTTONUP: "RIGHT_UP",
+                    WM_MBUTTONDOWN: "MIDDLE_DOWN",
+                    WM_MBUTTONUP: "MIDDLE_UP"
+                }
+                event_name = event_names.get(wParam, f"UNKNOWN({hex(wParam)})")
+                print(f"[HOOK] Evento físico detectado: {event_name}")
+
             # Ignora eventos injetados (nossos cliques programáticos)
             if not injected:
                 # Botão do meio (scroll) - toggle auto-click
                 if wParam == WM_MBUTTONDOWN:
+                    print(f"[DEBUG] SCROLL CLICK detectado! Toggling...")
                     self.toggle_auto_click()
 
                 # Botão esquerdo
@@ -223,7 +242,8 @@ class AutoClicker:
             print("[ERRO] Falha ao instalar hook. Execute como administrador.")
             return
 
-        print("[INFO] Hook instalado com sucesso")
+        print("[INFO] ✓ Hook de mouse instalado com sucesso!")
+        print("[INFO] ✓ Aguardando eventos de mouse...")
 
         # Message loop necessário para manter o hook vivo
         msg = wintypes.MSG()
