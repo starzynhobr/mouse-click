@@ -35,8 +35,8 @@ class MSLLHOOKSTRUCT(ctypes.Structure):
         ("dwExtraInfo", ctypes.c_void_p),
     ]
 
-# Tipo para HookProc (LRESULT é LONG_PTR)
-LRESULT = ctypes.c_long
+# Tipo para HookProc (LRESULT é LONG_PTR - pointer-sized integer)
+LRESULT = ctypes.c_ssize_t  # Funciona em 32 e 64 bit
 LowLevelMouseProc = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
 
 # INPUT structures para SendInput
@@ -67,6 +67,17 @@ MOUSEEVENTF_RIGHTUP   = 0x0010
 SendInput = user32.SendInput
 SendInput.argtypes = (wintypes.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 SendInput.restype  = wintypes.UINT
+
+# Variável global para armazenar instância do AutoClicker
+_auto_clicker_instance = None
+
+# Callback global do hook
+@LowLevelMouseProc
+def _global_mouse_hook(nCode, wParam, lParam):
+    """Hook callback global - delega para a instância do AutoClicker"""
+    if _auto_clicker_instance:
+        return _auto_clicker_instance._mouse_hook_callback(nCode, wParam, lParam)
+    return user32.CallNextHookEx(None, nCode, wParam, lParam)
 
 class AutoClicker:
     def __init__(self, cps=20, enable_right_click=False, hotkey='<ctrl>+<shift>+a', status_callback=None):
@@ -162,9 +173,8 @@ class AutoClicker:
             else:
                 time.sleep(0.01)
 
-    @LowLevelMouseProc
-    def low_level_mouse_proc(self, nCode, wParam, lParam):
-        """Hook callback - processa apenas eventos físicos"""
+    def _mouse_hook_callback(self, nCode, wParam, lParam):
+        """Hook callback interno - processa apenas eventos físicos"""
         if nCode == 0:
             ms = ctypes.cast(lParam, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
             injected = bool(ms.flags & LLMHF_INJECTED)
@@ -196,14 +206,15 @@ class AutoClicker:
 
     def install_hook(self):
         """Instala o hook e roda o message loop"""
+        global _auto_clicker_instance
+        _auto_clicker_instance = self
+
         WH_MOUSE_LL = 14
 
-        # Mantém referência para o callback (evita garbage collection)
-        self.hook_proc = LowLevelMouseProc(self.low_level_mouse_proc)
-
+        # Usa o callback global
         self.hook_id = user32.SetWindowsHookExW(
             WH_MOUSE_LL,
-            self.hook_proc,
+            _global_mouse_hook,
             kernel32.GetModuleHandleW(None),
             0
         )
@@ -243,7 +254,10 @@ class AutoClicker:
 
     def stop(self):
         """Para o auto-clicker"""
+        global _auto_clicker_instance
+
         self.running = False
+        _auto_clicker_instance = None
 
         # Envia WM_QUIT para sair do message loop
         if self.hook_thread and self.hook_thread.is_alive():
