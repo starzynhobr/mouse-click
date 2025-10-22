@@ -230,19 +230,31 @@ class AutoClicker:
 
         WH_MOUSE_LL = 14
 
-        # Usa o callback global
+        print("[INFO] Tentando instalar hook...")
+        print(f"[INFO] Thread ID: {threading.get_ident()}")
+
+        # Para hooks globais (WH_MOUSE_LL), passamos NULL como hMod
+        # Isso funciona melhor do que GetModuleHandleW
         self.hook_id = user32.SetWindowsHookExW(
             WH_MOUSE_LL,
             _global_mouse_hook,
-            kernel32.GetModuleHandleW(None),
-            0
+            None,  # NULL para hooks globais
+            0      # dwThreadId = 0 (todos os threads)
         )
 
         if not self.hook_id:
-            print("[ERRO] Falha ao instalar hook. Execute como administrador.")
+            # Pega o código de erro do Windows
+            error_code = ctypes.get_last_error()
+            print(f"[ERRO] Falha ao instalar hook!")
+            print(f"[ERRO] Código de erro: {error_code}")
+            print(f"[ERRO] Possíveis causas:")
+            print(f"  - Falta de privilégios de administrador")
+            print(f"  - Antivírus bloqueando")
+            print(f"  - Outro programa usando hook global")
             return
 
         print("[INFO] ✓ Hook de mouse instalado com sucesso!")
+        print(f"[INFO] ✓ Hook ID: {self.hook_id}")
         print("[INFO] ✓ Aguardando eventos de mouse...")
 
         # Message loop necessário para manter o hook vivo
@@ -262,8 +274,28 @@ class AutoClicker:
             user32.UnhookWindowsHookEx(self.hook_id)
             print("[INFO] Hook removido")
 
+    def is_admin(self):
+        """Verifica se está rodando como administrador"""
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            return False
+
     def start(self):
         """Inicia o auto-clicker"""
+        # Verifica privilégios
+        if not self.is_admin():
+            print("=" * 70)
+            print("⚠️  AVISO: Programa NÃO está rodando como Administrador!")
+            print("=" * 70)
+            print("O hook de mouse pode falhar sem privilégios elevados.")
+            print("Execute como administrador para garantir funcionamento.")
+            print("=" * 70)
+        else:
+            print("=" * 70)
+            print("✓ Executando como Administrador")
+            print("=" * 70)
+
         # Inicia thread do clicker
         self.clicker_thread = threading.Thread(target=self.clicker_loop, daemon=True)
         self.clicker_thread.start()

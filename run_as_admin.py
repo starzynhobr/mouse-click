@@ -4,6 +4,7 @@ Script para executar GUI como administrador
 import ctypes
 import sys
 import os
+import subprocess
 
 def is_admin():
     """Verifica se o script está rodando como administrador"""
@@ -13,19 +14,27 @@ def is_admin():
         return False
 
 if __name__ == "__main__":
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    gui_script = os.path.join(script_dir, "gui.py")
+
     if not is_admin():
+        print("=" * 70)
         print("Solicitando privilégios de administrador...")
-        # Re-executa o script como administrador
-        script = os.path.join(os.path.dirname(__file__), "gui.py")
-        ctypes.windll.shell32.ShellExecuteW(
-            None,
-            "runas",  # Verb para executar como admin
-            sys.executable,  # Python
-            f'"{script}"',  # Arquivo a executar
-            os.path.dirname(__file__),  # Working directory
-            1  # SW_SHOWNORMAL
-        )
+        print("Aceite o UAC quando aparecer!")
+        print("=" * 70)
+
+        # Usa subprocess com runas via shell
+        try:
+            # Cria um comando PowerShell que executa como admin
+            cmd = f'Start-Process python -ArgumentList \\"\\"{gui_script}\\"\\\" -Verb RunAs -WorkingDirectory \\"{script_dir}\\"'
+            subprocess.run(['powershell', '-Command', cmd], check=True)
+        except Exception as e:
+            print(f"Erro ao executar como admin: {e}")
+            input("Pressione Enter para sair...")
     else:
         # Já é admin, importa e executa a GUI
-        print("Executando como Administrador...")
-        import gui
+        print("=" * 70)
+        print("✓ Executando como Administrador...")
+        print("=" * 70)
+        os.chdir(script_dir)
+        exec(open(gui_script).read())
