@@ -9,7 +9,6 @@ from auto_clicker import AutoClicker
 import sys
 import pystray
 from PIL import Image, ImageDraw
-from pynput.keyboard import GlobalHotKeys
 import json
 import os
 

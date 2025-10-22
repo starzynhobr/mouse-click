@@ -2,7 +2,7 @@
 Auto-Clicker usando Windows Low-Level Mouse Hook (WH_MOUSE_LL)
 Solução que distingue cliques físicos de cliques programáticos usando LLMHF_INJECTED
 """
-
+from pynput.keyboard import GlobalHotKeys
 import ctypes
 import ctypes.wintypes as wintypes
 import threading
@@ -110,6 +110,10 @@ class AutoClicker:
 
         # Thread para message loop do hook
         self.hook_thread = None
+        self.hook_thread_id = None
+
+        self.hotkey = hotkey
+        self.hotkey_listener = None
 
     def set_cps(self, cps):
         """Atualiza os cliques por segundo"""
@@ -121,8 +125,34 @@ class AutoClicker:
         self.enable_right_click = enabled
 
     def set_hotkey(self, hotkey):
-        """Define nova tecla de atalho (não implementado)"""
-        pass
+        """Define e registra nova tecla de atalho"""
+        print(f"[HOTKEY] Tentando registrar novo atalho: {hotkey}")
+        self.hotkey = hotkey
+
+        # Para o listener antigo, se existir
+        if self.hotkey_listener:
+            try:
+                self.hotkey_listener.stop()
+            except Exception as e:
+                print(f"[DEBUG] Erro ao parar listener antigo: {e}")
+            self.hotkey_listener = None
+
+        # Tenta criar o novo listener
+        if not self.hotkey:
+            print("[HOTKEY] Atalho vazio, listener não iniciado.")
+            return
+
+        try:
+            hotkey_map = {
+                self.hotkey: self.toggle_auto_click
+            }
+            self.hotkey_listener = GlobalHotKeys(hotkey_map)
+            self.hotkey_listener.start()
+            print(f"[HOTKEY] ✓ Atalho {hotkey} registrado com sucesso.")
+        except Exception as e:
+            print(f"[ERRO] Falha ao registrar atalho '{hotkey}': {e}")
+            print("[ERRO] Verifique se o formato está correto (ex: <ctrl>+<shift>+a)")
+            self.hotkey_listener = None
 
     def toggle_auto_click(self):
         """Alterna entre ativar/desativar o modo auto-click"""
@@ -195,7 +225,6 @@ class AutoClicker:
                     WM_MBUTTONUP: "MIDDLE_UP"
                 }
                 event_name = event_names.get(wParam, f"UNKNOWN({hex(wParam)})")
-                print(f"[HOOK] Evento físico detectado: {event_name}")
 
             # Ignora eventos injetados (nossos cliques programáticos)
             if not injected:
@@ -228,10 +257,12 @@ class AutoClicker:
         global _auto_clicker_instance
         _auto_clicker_instance = self
 
+        self.hook_thread_id = kernel32.GetCurrentThreadId()
+
         WH_MOUSE_LL = 14
 
         print("[INFO] Tentando instalar hook...")
-        print(f"[INFO] Thread ID: {threading.get_ident()}")
+        print(f"[INFO] Thread ID: {self.hook_thread_id}")
 
         # Para hooks globais (WH_MOUSE_LL), passamos NULL como hMod
         # Isso funciona melhor do que GetModuleHandleW
@@ -296,6 +327,8 @@ class AutoClicker:
             print("✓ Executando como Administrador")
             print("=" * 70)
 
+        self.set_hotkey(self.hotkey)
+
         # Inicia thread do clicker
         self.clicker_thread = threading.Thread(target=self.clicker_loop, daemon=True)
         self.clicker_thread.start()
@@ -311,10 +344,14 @@ class AutoClicker:
         self.running = False
         _auto_clicker_instance = None
 
+        # Para o listener de atalho
+        if self.hotkey_listener: # <-- ADICIONE ESTA LINHA
+            self.hotkey_listener.stop()
+
         # Envia WM_QUIT para sair do message loop
         if self.hook_thread and self.hook_thread.is_alive():
             user32.PostThreadMessageW(
-                kernel32.GetCurrentThreadId(),
+                self.hook_thread_id,
                 0x0012,  # WM_QUIT
                 0,
                 0
