@@ -62,3 +62,12 @@ Para gerar o `.exe` único, use o Nuitka:
     ```
 
 3.  O `gui.exe` estará na pasta `dist`.
+
+## ⚖️ Licenciamento (Dual Licensing)
+
+Este projeto está disponível sob duas licenças diferentes:
+
+1. **Uso Comunitário (GPLv3):** Ideal para desenvolvedores, estudantes e entusiastas do Open Source. Todo código derivado deve permanecer aberto.
+2. **Uso Comercial:** Se você deseja integrar este AutoClicker em um produto proprietário, vendê-lo como parte de um pacote de software fechado ou usá-lo em um ambiente corporativo sem as restrições da GPLv3, uma **Licença Comercial** é necessária.
+
+Para adquirir uma licença comercial ou discutir parcerias, entre em contato: [starzynhobr@gmail.com]
