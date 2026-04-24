@@ -80,7 +80,15 @@ def _global_mouse_hook(nCode, wParam, lParam):
     return user32.CallNextHookEx(None, nCode, wParam, lParam)
 
 class AutoClicker:
-    def __init__(self, cps=20, enable_right_click=False, hotkey='<ctrl>+<shift>+a', status_callback=None):
+    def __init__(
+        self,
+        cps=20,
+        enable_right_click=False,
+        hotkey='<ctrl>+<shift>+a',
+        burst_mode=False,
+        burst_clicks=3,
+        status_callback=None
+    ):
         """
         Inicializa o auto-clicker com hook de baixo nível
 
@@ -93,6 +101,8 @@ class AutoClicker:
         self.cps = cps
         self.click_interval = 1.0 / cps
         self.enable_right_click = enable_right_click
+        self.burst_mode = burst_mode
+        self.burst_clicks = max(1, int(burst_clicks))
         self.status_callback = status_callback
 
         # Estado
@@ -100,6 +110,10 @@ class AutoClicker:
         self.left_holding = False
         self.right_holding = False
         self.running = True
+        self.left_burst_active = False
+        self.right_burst_active = False
+        self.left_burst_lock = threading.Lock()
+        self.right_burst_lock = threading.Lock()
 
         # Hook
         self.hook_id = None
@@ -123,6 +137,14 @@ class AutoClicker:
     def set_right_click(self, enabled):
         """Habilita/desabilita auto-click no botão direito"""
         self.enable_right_click = enabled
+
+    def set_burst_mode(self, enabled):
+        """Habilita/desabilita o modo rajada"""
+        self.burst_mode = enabled
+
+    def set_burst_clicks(self, clicks):
+        """Atualiza a quantidade de cliques por rajada"""
+        self.burst_clicks = max(1, int(clicks))
 
     def set_hotkey(self, hotkey):
         """Define e registra nova tecla de atalho"""
@@ -181,13 +203,45 @@ class AutoClicker:
         arr = (INPUT * 2)(down, up)
         SendInput(2, arr, ctypes.sizeof(INPUT))
 
+    def trigger_burst(self, button):
+        """Dispara uma rajada de cliques sem bloquear o hook do mouse"""
+        if button == "left":
+            if self.left_burst_active:
+                return
+            threading.Thread(target=self._execute_burst, args=(button,), daemon=True).start()
+        elif button == "right":
+            if self.right_burst_active:
+                return
+            threading.Thread(target=self._execute_burst, args=(button,), daemon=True).start()
+
+    def _execute_burst(self, button):
+        """Executa a quantidade configurada de cliques o mais rápido possível"""
+        if button == "left":
+            lock = self.left_burst_lock
+            click_fn = self.click_left
+            active_attr = "left_burst_active"
+        else:
+            lock = self.right_burst_lock
+            click_fn = self.click_right
+            active_attr = "right_burst_active"
+
+        with lock:
+            setattr(self, active_attr, True)
+            try:
+                for _ in range(self.burst_clicks):
+                    if not self.running or not self.auto_click_enabled:
+                        break
+                    click_fn()
+            finally:
+                setattr(self, active_attr, False)
+
     def clicker_loop(self):
         """Thread que dispara os cliques enquanto o botão está sendo segurado"""
         click_count = 0
 
         while self.running:
             # Botão esquerdo
-            if self.auto_click_enabled and self.left_holding:
+            if self.auto_click_enabled and not self.burst_mode and self.left_holding:
                 self.click_left()
                 click_count += 1
 
@@ -197,7 +251,7 @@ class AutoClicker:
                 time.sleep(self.click_interval)
 
             # Botão direito (se habilitado)
-            elif self.enable_right_click and self.auto_click_enabled and self.right_holding:
+            elif self.enable_right_click and self.auto_click_enabled and not self.burst_mode and self.right_holding:
                 self.click_right()
                 click_count += 1
 
@@ -237,6 +291,8 @@ class AutoClicker:
                 elif wParam == WM_LBUTTONDOWN:
                     print(f"[DEBUG] Botão esquerdo físico PRESSIONADO")
                     self.left_holding = True
+                    if self.auto_click_enabled and self.burst_mode:
+                        self.trigger_burst("left")
                 elif wParam == WM_LBUTTONUP:
                     print(f"[DEBUG] Botão esquerdo físico SOLTO")
                     self.left_holding = False
@@ -245,6 +301,8 @@ class AutoClicker:
                 elif wParam == WM_RBUTTONDOWN:
                     print(f"[DEBUG] Botão direito físico PRESSIONADO")
                     self.right_holding = True
+                    if self.enable_right_click and self.auto_click_enabled and self.burst_mode:
+                        self.trigger_burst("right")
                 elif wParam == WM_RBUTTONUP:
                     print(f"[DEBUG] Botão direito físico SOLTO")
                     self.right_holding = False
