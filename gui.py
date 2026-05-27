@@ -22,32 +22,32 @@ TRANSLATIONS = {
     "pt": {
         "language_label": "PT",
         "title": "AutoClicker Pro",
-        "subtitle": "Controle avancado de cliques automaticos",
+        "subtitle": "Controle avançado de cliques automáticos",
         "status_on": "Ativado",
         "status_off": "Desativado",
         "status_inactive": "Use scroll ou {hotkey} para ativar",
-        "status_active_hold": "Segure o botao para clicar, solte para parar",
+        "status_active_hold": "Segure o botão para clicar, solte para parar",
         "status_active_burst": "Pressione para disparar {count} cliques em rajada",
         "cps_label": "Clicks por Segundo",
         "cps_hint": "Recomendado: 20 clicks/s",
-        "options": "Opcoes",
-        "right_click": "Habilitar botao direito",
+        "options": "Opções",
+        "right_click": "Habilitar botão direito",
         "hide_tray": "Minimizar para bandeja",
         "burst_mode": "Modo rajada ao pressionar",
         "burst_count": "Cliques por disparo",
-        "burst_help": "Cada pressionamento dispara X cliques o mais rapido possivel",
-        "burst_speed_note": "O CPS acima afeta apenas o modo padrao de clique continuo",
-        "burst_warning": "Aviso: acima de 50 cliques pode causar sequencias longas ou imprevisiveis no app alvo.",
+        "burst_help": "Cada pressionamento dispara X cliques o mais rápido possível",
+        "burst_speed_note": "O CPS acima afeta apenas o modo padrão de clique contínuo",
+        "burst_warning": "Aviso: acima de 50 cliques pode causar sequências longas ou imprevisíveis no app alvo.",
         "hotkey_title": "Atalho de Teclado",
         "hotkey_placeholder": "Ex: <ctrl>+<shift>+a",
         "apply": "Aplicar",
         "instructions_title": "Como usar:",
         "instruction_1": "1. Ative clicando no scroll ou usando {hotkey}",
-        "instruction_2": "2. Modo padrao: segure o botao para clicar continuamente",
-        "instruction_3": "3. Modo rajada: um clique fisico dispara a quantidade configurada em velocidade maxima",
+        "instruction_2": "2. Modo padrão: segure o botão para clicar continuamente",
+        "instruction_3": "3. Modo rajada: um clique físico dispara a quantidade configurada em velocidade máxima",
         "tray_show": "Mostrar",
         "tray_exit": "Sair",
-        "no_hotkey": "Atalho nao definido",
+        "no_hotkey": "Atalho não definido",
     },
     "en": {
         "language_label": "EN",
@@ -227,17 +227,13 @@ class AutoClickerGUI:
         top_bar.pack(fill="x")
 
         self.lang_var = ctk.StringVar(value=self.config["language"].upper())
-        self.language_selector = ctk.CTkOptionMenu(
+        self.language_selector = ctk.CTkSegmentedButton(
             top_bar,
             values=["PT", "EN"],
             variable=self.lang_var,
-            width=62,
-            height=28,
-            corner_radius=14,
             command=self.on_language_change,
             font=ctk.CTkFont(size=11, weight="bold"),
-            dropdown_font=ctk.CTkFont(size=11),
-            anchor="center",
+            height=28
         )
         self.language_selector.pack(side="right")
 
