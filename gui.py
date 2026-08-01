@@ -4,6 +4,7 @@ Modern GUI for the auto-clicker using CustomTkinter.
 
 import json
 import os
+import shutil
 import sys
 import threading
 
@@ -17,11 +18,27 @@ from auto_clicker import AutoClicker
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
+APP_NAME = "STZ Clicker"
+
+
+def resource_path(relative_path):
+    """Resolve a bundled asset path for both source runs and frozen builds."""
+    base_path = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+
+def config_path():
+    """Config lives in %APPDATA% so the frozen exe can always write it."""
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    folder = os.path.join(base, "STZClicker")
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, "config.json")
+
 
 TRANSLATIONS = {
     "pt": {
         "language_label": "PT",
-        "title": "AutoClicker Pro",
+        "title": "STZ Clicker",
         "subtitle": "Controle avançado de cliques automáticos",
         "status_on": "Ativado",
         "status_off": "Desativado",
@@ -51,7 +68,7 @@ TRANSLATIONS = {
     },
     "en": {
         "language_label": "EN",
-        "title": "AutoClicker Pro",
+        "title": "STZ Clicker",
         "subtitle": "Advanced control for automatic clicking",
         "status_on": "Enabled",
         "status_off": "Disabled",
@@ -85,11 +102,14 @@ TRANSLATIONS = {
 class AutoClickerGUI:
     def __init__(self):
         self.window = ctk.CTk()
-        self.window.title("AutoClicker Pro")
+        self.window.title(APP_NAME)
         self.window.geometry("420x760")
         self.window.resizable(False, False)
 
-        self.config_file = "config.json"
+        self.app_image = self.load_app_image()
+        self.apply_window_icon()
+
+        self.config_file = config_path()
         self.config = self.load_config()
 
         self.clicker = None
@@ -104,7 +124,28 @@ class AutoClickerGUI:
 
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+    def load_app_image(self):
+        try:
+            return Image.open(resource_path(os.path.join("assets", "stz-clicker.png"))).convert("RGBA")
+        except Exception as e:
+            print(f"Erro ao carregar icone: {e}")
+            return None
+
+    def apply_window_icon(self):
+        ico = resource_path(os.path.join("assets", "stz-clicker.ico"))
+        try:
+            self.window.iconbitmap(ico)
+        except Exception as e:
+            print(f"Erro ao aplicar icone da janela: {e}")
+
     def load_config(self):
+        legacy = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        if not os.path.exists(self.config_file) and os.path.exists(legacy):
+            try:
+                shutil.copyfile(legacy, self.config_file)
+            except Exception as e:
+                print(f"Erro ao migrar config: {e}")
+
         default_config = {
             "cps": 20,
             "enable_right_click": False,
@@ -534,6 +575,11 @@ class AutoClickerGUI:
             self.window.after(1000, lambda: self.hotkey_entry.configure(border_color=original_color))
 
     def status_callback(self, enabled):
+        # Called from the mouse-hook / hotkey threads: Tk widgets must only be
+        # touched from the main thread, so marshal the update through after().
+        self.window.after(0, self._apply_status, enabled)
+
+    def _apply_status(self, enabled):
         self.is_enabled = enabled
 
         if enabled:
@@ -559,43 +605,37 @@ class AutoClickerGUI:
         )
         self.clicker.start()
 
+    def create_tray_image(self, color):
+        """App logo with a small status dot in the corner."""
+        size = 64
+        if self.app_image is not None:
+            image = self.app_image.resize((size, size), Image.LANCZOS).copy()
+        else:
+            image = Image.new("RGBA", (size, size), (0, 0, 0, 255))
+
+        dc = ImageDraw.Draw(image)
+        dc.ellipse([size - 22, size - 22, size - 4, size - 4], fill=color, outline="black", width=2)
+        return image
+
     def create_tray_icon(self):
         if self.tray_icon:
             return
 
-        def create_icon_image(color="red"):
-            width = 64
-            height = 64
-            image = Image.new("RGB", (width, height), color="black")
-            dc = ImageDraw.Draw(image)
-            dc.ellipse([16, 16, 48, 48], fill=color)
-            return image
-
-        icon_image = create_icon_image("red")
-
         menu = pystray.Menu(
-            pystray.MenuItem(self.t("tray_show"), self.show_window),
+            pystray.MenuItem(self.t("tray_show"), self.show_window, default=True),
             pystray.MenuItem(self.t("tray_exit"), self.quit_app),
         )
 
-        self.tray_icon = pystray.Icon("AutoClicker", icon_image, self.t("title"), menu)
+        icon_image = self.create_tray_image("#22c55e" if self.is_enabled else "#ef4444")
+        self.tray_icon = pystray.Icon("STZClicker", icon_image, APP_NAME, menu)
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
     def update_tray_icon(self):
         if not self.tray_icon:
             return
 
-        def create_icon_image(color="red"):
-            width = 64
-            height = 64
-            image = Image.new("RGB", (width, height), color="black")
-            dc = ImageDraw.Draw(image)
-            dc.ellipse([16, 16, 48, 48], fill=color)
-            return image
-
-        color = "green" if self.is_enabled else "red"
-        self.tray_icon.icon = create_icon_image(color)
-        self.tray_icon.title = self.t("title")
+        self.tray_icon.icon = self.create_tray_image("#22c55e" if self.is_enabled else "#ef4444")
+        self.tray_icon.title = APP_NAME
 
     def destroy_tray_icon(self):
         if self.tray_icon:

@@ -1,6 +1,6 @@
-# AutoClicker Pro
+# STZ Clicker
 
-AutoClicker Pro is a lightweight Windows auto-clicker with a modern CustomTkinter interface and a low-level mouse hook for precise physical-click detection.
+STZ Clicker is a lightweight Windows auto-clicker with a modern CustomTkinter interface and a low-level mouse hook for precise physical-click detection.
 
 The app supports two click modes:
 
@@ -21,11 +21,13 @@ The app supports two click modes:
 * **Right-click support:** Optional auto-clicking for the right mouse button.
 * **System tray support:** Optional minimize-to-tray behavior.
 * **Localization:** Minimal `PT` and `EN` language selector in the top-right corner.
+* **Branded icon:** Window, taskbar, and tray use the STZ Clicker logo; the tray icon shows a green/red status dot.
+* **Roaming settings:** Settings are stored in `%APPDATA%\STZClicker\config.json`, so the one-file executable can always write them.
 
 ## How To Use
 
-1. Download `gui.exe` from the repository releases.
-2. Run `gui.exe`.
+1. Download `STZ Clicker.exe` from the repository releases.
+2. Run `STZ Clicker.exe`.
 3. Use the scroll button or `Ctrl+Shift+A` to enable or disable the auto-clicker.
 4. In default mode, hold the left mouse button to click continuously.
 5. Enable right-click support if you also want the right mouse button to trigger clicks.
@@ -85,6 +87,8 @@ This project targets Windows and uses Python.
     python gui.py
     ```
 
+    Set `STZ_CLICKER_DEBUG=1` to enable verbose hook logging (off by default, since the hook callback runs on every mouse event).
+
 If your virtual environment was created without `pip`, bootstrap it with:
 
 ```powershell
@@ -102,34 +106,36 @@ python -m pip install nuitka zstandard ordered-set
 Build a single-file executable:
 
 ```powershell
-python -m nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=customtkinter --include-data-file="config.json=config.json" --output-dir=dist gui.py
+.uild.ps1
 ```
 
-If your machine does not have a C compiler available, or if you are using a newer Python version where Nuitka recommends Zig, use:
+That wraps the following Nuitka command:
 
 ```powershell
-python -m nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=customtkinter --include-data-file="config.json=config.json" --output-dir=dist --assume-yes-for-downloads --zig gui.py
+python -m nuitka --onefile --windows-console-mode=disable --enable-plugin=tk-inter --include-package=customtkinter --include-data-dir=assets=assets --windows-icon-from-ico=assets/stz-clicker.ico --output-filename="STZ Clicker.exe" --output-dir=dist --assume-yes-for-downloads gui.py
 ```
+
+If your machine does not have a C compiler available, add `--zig` to the command above.
 
 The generated one-file executable will be:
 
 ```text
-dist/gui.exe
+dist/STZ Clicker.exe
 ```
 
-The generated `gui.exe` is the file intended for distribution. Nuitka may also leave build folders such as `gui.build`, `gui.dist`, and `gui.onefile-build` for inspection; those folders are not needed by end users when distributing the one-file executable.
+Nuitka may also leave build folders such as `gui.build`, `gui.dist`, and `gui.onefile-build` for inspection; those folders are not needed by end users when distributing the one-file executable.
 
 ## Distribution Notes
 
 Without code signing, Windows SmartScreen or antivirus tools may warn users because the executable is new and unsigned. This can happen with Nuitka, PyInstaller, or any other unsigned Windows executable.
 
-For simple GitHub Releases, the recommended artifact is the one-file `dist/gui.exe`. For maximum compatibility, you can also provide a zipped standalone build in addition to the one-file build.
+For simple GitHub Releases, the recommended artifact is the one-file `dist/STZ Clicker.exe`. For maximum compatibility, you can also provide a zipped standalone build in addition to the one-file build.
 
 ## Licensing
 
 This project is available under dual licensing:
 
 * **Community use (GPLv3):** Suitable for open-source usage, learning, and community projects. Derivative code must remain open under GPL-compatible terms.
-* **Commercial use:** A commercial license is required if you want to integrate AutoClicker Pro into proprietary software, sell it as part of a closed product, or use it commercially without GPLv3 obligations.
+* **Commercial use:** A commercial license is required if you want to integrate STZ Clicker into proprietary software, sell it as part of a closed product, or use it commercially without GPLv3 obligations.
 
 For commercial licensing or partnership questions, contact: `starzynhobr@gmail.com`.
