@@ -10,7 +10,8 @@ python -m nuitka `
     --include-package=customtkinter `
     --include-data-dir=assets=assets `
     --windows-icon-from-ico=assets/stz-clicker.ico `
-    --company-name="StarzynhoBR" `
+    --company-name="STZ Labs" `
+    --product-version=1.1.0 `
     --product-name="STZ Clicker" `
     --file-description="STZ Clicker - auto clicker" `
     --output-filename="STZ Clicker.exe" `
